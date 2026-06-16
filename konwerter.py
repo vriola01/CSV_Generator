@@ -14,12 +14,12 @@ st.write("Wybierz program optymalizacyjny, określ format eksportu i przeciągni
 col1, col2 = st.columns(2)
 with col1:
     tryb = st.radio(
-        "Wybierz maszynę (źródło PDF):", 
-        ("Metoda HPO (Schelling)", "Metoda pCUT")
+        "Wybierz plik optymalizacyjny:", 
+        ("HPO (Schelling)", "pCUT (Planowanie)")
     )
 with col2:
     co_eksportowac = st.radio(
-        "Co ma zawierać 3. kolumna pliku CSV?", 
+        "Co ma zawierać plik CSV?", 
         ("Numery formatek (ID)", "Wymiary formatek (Dł. x Szer.)")
     )
 

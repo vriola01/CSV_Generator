@@ -14,7 +14,7 @@ st.write("Wybierz program optymalizacyjny, określ format eksportu i przeciągni
 col1, col2 = st.columns(2)
 with col1:
     tryb = st.radio(
-        "Wybierz plik optymalizacyjny:", 
+        "Wybierz program optymalizacyjny:", 
         ("HPO (Schelling)", "pCUT (Planowanie)")
     )
 with col2:

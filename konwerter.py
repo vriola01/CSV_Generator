@@ -5,10 +5,10 @@ import pandas as pd
 import io
 
 # Konfiguracja wyglądu naszej strony internetowej
-st.set_page_config(page_title="Dekoder WoodEco", layout="centered")
+st.set_page_config(page_title="CSV Generator", layout="centered")
 
-st.title("Dekoder PDF do CSV 🌲 WoodEco")
-st.write("Wybierz maszynę produkcyjną, określ format eksportu i przeciągnij plik PDF, aby wygenerować CSV.")
+st.title("FORMATYZER CSV generator")
+st.write("Wybierz program optymalizacyjny, określ format eksportu i przeciągnij plik PDF, aby wygenerować CSV.")
 
 # --- NOWOŚĆ: Ułożenie opcji wyboru w dwóch estetycznych kolumnach ---
 col1, col2 = st.columns(2)

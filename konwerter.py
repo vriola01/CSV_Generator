@@ -5,18 +5,38 @@ import pandas as pd
 import io
 
 # Konfiguracja wyglądu naszej strony internetowej
-st.set_page_config(page_title="CSV Generator", layout="centered")
+st.set_page_config(page_title="Dekoder WoodEco", layout="centered")
 
-st.title("CSV Generator")
-st.write("Wybierz program optymalizacyjny i przeciągnij plik PDF, aby wygenerować CSV.")
+st.title("Dekoder PDF do CSV 🌲 WoodEco")
+st.write("Wybierz maszynę produkcyjną, określ format eksportu i przeciągnij plik PDF, aby wygenerować CSV.")
 
-# 1. Wybór metody za pomocą przełącznika (Radio button)
-tryb = st.radio("Optymalizator:", ("HPO (Schelling)", "pCUT"))
+# --- NOWOŚĆ: Ułożenie opcji wyboru w dwóch estetycznych kolumnach ---
+col1, col2 = st.columns(2)
+with col1:
+    tryb = st.radio(
+        "Wybierz maszynę (źródło PDF):", 
+        ("Metoda HPO (Schelling)", "Metoda pCUT")
+    )
+with col2:
+    co_eksportowac = st.radio(
+        "Co ma zawierać 3. kolumna pliku CSV?", 
+        ("Numery formatek (ID)", "Wymiary formatek (Dł. x Szer.)")
+    )
 
-# 2. Miejsce na "Drag & Drop" prosto w przeglądarce!
 wgrany_plik = st.file_uploader("Wgraj plik PDF tutaj", type="pdf")
 
-# --- NASZA LOGIKA HPO ---
+# --- Funkcja pomocnicza czyszcząca wymiary z ".00" dla HPO ---
+def formatuj_wymiar(val):
+    val = val.replace(',', '.')
+    try:
+        f = float(val)
+        if f.is_integer():
+            return str(int(f))
+        return str(f)
+    except ValueError:
+        return val
+
+# --- LOGIKA HPO ---
 def analizuj_hpo(plik_pdf):
     dane = []
     with pdfplumber.open(plik_pdf) as pdf:
@@ -45,25 +65,34 @@ def analizuj_hpo(plik_pdf):
             sumy_formatek = {}
             for line in tabela.split('\n'):
                 parts = line.strip().split()
-                if len(parts) >= 3:
+                # Wymagamy minimum 5 elementów w linijce, aby odczytać wymiary
+                if len(parts) >= 5:
                     try:
                         akt_nr = int(parts[0])
                         kombi_nr = int(parts[1].replace('*', '')) 
                         ilosc = int(parts[2])
+                        
+                        # Pobieranie i formatowanie wymiarów z kolumny 3 i 4
+                        wym_a = formatuj_wymiar(parts[3])
+                        wym_b = formatuj_wymiar(parts[4])
+                        wymiar_str = f"{wym_a}x{wym_b}"
+                        
                         if 0 < akt_nr < 1000 and 0 < kombi_nr < 1000:
                             if kombi_nr not in sumy_formatek:
-                                sumy_formatek[kombi_nr] = 0
-                            sumy_formatek[kombi_nr] += ilosc
+                                sumy_formatek[kombi_nr] = {'ilosc': 0, 'wymiar': wymiar_str}
+                            sumy_formatek[kombi_nr]['ilosc'] += ilosc
                     except ValueError:
                         pass
                         
-            for kombi_nr, total_ilosc in sumy_formatek.items():
+            for kombi_nr, data in sumy_formatek.items():
+                total_ilosc = data['ilosc']
                 if total_ilosc > 0 and ilosc_plyt > 0 and total_ilosc % ilosc_plyt == 0:
                     sztuk_na_plyte = total_ilosc // ilosc_plyt
-                    dane.append([numer_planu, ilosc_plyt, kombi_nr, sztuk_na_plyte])
+                    # Zapisujemy cały wiersz "roboczy" (z oboma danymi do wyboru później)
+                    dane.append([numer_planu, ilosc_plyt, kombi_nr, data['wymiar'], sztuk_na_plyte])
     return dane
 
-# --- NASZA LOGIKA pCUT ---
+# --- LOGIKA pCUT ---
 def analizuj_pcut(plik_pdf):
     dane = []
     wymiary_do_id = {} 
@@ -106,43 +135,56 @@ def analizuj_pcut(plik_pdf):
         sumy_formatek = {}
         for fmt_id, L, W, sztuka in plan['czesci']:
             baza_id = wymiary_do_id[(L, W)]
-            sumy_formatek[baza_id] = sumy_formatek.get(baza_id, 0) + sztuka
+            wymiar_str = f"{L}x{W}"
+            if baza_id not in sumy_formatek:
+                sumy_formatek[baza_id] = {'ilosc': 0, 'wymiar': wymiar_str}
+            sumy_formatek[baza_id]['ilosc'] += sztuka
 
-        for baza_id, total_sztuka in sumy_formatek.items():
-            sztuk_na_plyte = round(total_sztuka / ilosc_plyt)
+        for baza_id, data in sumy_formatek.items():
+            sztuk_na_plyte = round(data['ilosc'] / ilosc_plyt)
             if sztuk_na_plyte > 0:
-                dane.append([numer_planu, ilosc_plyt, baza_id, sztuk_na_plyte])
+                dane.append([numer_planu, ilosc_plyt, baza_id, data['wymiar'], sztuk_na_plyte])
     dane.sort(key=lambda x: x[0])
     return dane
 
-# --- GENEROWANIE WYNIKÓW ---
+# --- GENEROWANIE WYNIKÓW I TABELI ---
 if wgrany_plik is not None:
-    if st.button("Dekoduj plik PDF", type="primary"):
-        with st.spinner("Przetwarzam dane..."):
+    if st.button("Dekoduj plik PDF", type="primary", use_container_width=True):
+        with st.spinner("Trwa analizowanie i przeliczanie danych..."):
             if "HPO" in tryb:
-                wynik = analizuj_hpo(wgrany_plik)
+                wynik_roboczy = analizuj_hpo(wgrany_plik)
             else:
-                wynik = analizuj_pcut(wgrany_plik)
+                wynik_roboczy = analizuj_pcut(wgrany_plik)
             
-            if wynik:
-                st.success("Gotowe! Możesz pobrać plik CSV lub podejrzeć dane poniżej.")
+            if wynik_roboczy:
+                st.success("Sukces! Wybierz odpowiedni układ i pobierz gotowy plik CSV.")
                 
-                # Używamy Pandas do stworzenia ładnej tabeli HTML
-                df = pd.DataFrame(wynik, columns=["Plan cięcia", "Ilość Płyt", "Nr Formatki", "Sztuk na płytę"])
+                # Użytkownik decyduje, która kolumna trafia do wyjściowego CSV
+                if "Numery" in co_eksportowac:
+                    # Bierzemy [Plan, Płyty, ID Formatki, Sztuk]
+                    dane_docelowe = [[row[0], row[1], row[2], row[4]] for row in wynik_roboczy]
+                    nazwy_kolumn = ["Plan cięcia", "Ilość Płyt", "Nr Formatki", "Sztuk na płytę"]
+                else:
+                    # Bierzemy [Plan, Płyty, Wymiar, Sztuk]
+                    dane_docelowe = [[row[0], row[1], row[3], row[4]] for row in wynik_roboczy]
+                    nazwy_kolumn = ["Plan cięcia", "Ilość Płyt", "Wymiar", "Sztuk na płytę"]
+                
+                # Tworzymy podgląd na stronie
+                df = pd.DataFrame(dane_docelowe, columns=nazwy_kolumn)
                 st.dataframe(df, use_container_width=True)
                 
-                # Przygotowanie pliku CSV w pamięci
+                # Generujemy "ukryty" plik gotowy do pobrania
                 csv_buffer = io.StringIO()
                 df.to_csv(csv_buffer, sep=';', index=False, header=False)
                 
                 nazwa_pobrana = wgrany_plik.name.replace('.pdf', '.csv').replace('.PDF', '.csv')
                 
-                # Przycisk do pobierania CSV z poziomu przeglądarki
+                # Duży, wygodny przycisk pobierania
                 st.download_button(
-                    label="Pobierz plik CSV",
+                    label="Pobierz gotowy plik CSV",
                     data=csv_buffer.getvalue(),
                     file_name=nazwa_pobrana,
                     mime="text/csv"
                 )
             else:
-                st.error("Błąd: Nie znaleziono danych. Upewnij się, że wgrałeś właściwy plik i wybrałeś dobrą maszynę.")
+                st.error("Błąd: Nie znaleziono danych. Upewnij się, że wgrałeś właściwy plik i ustawiłeś dobrą maszynę źródłową.")
